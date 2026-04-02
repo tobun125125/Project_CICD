@@ -14,5 +14,5 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    return view('welcome');
+    return 'Hello Hospital System! This was automatically deployed by Jenkins CI/CD';
 });
