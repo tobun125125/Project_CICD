@@ -22,14 +22,21 @@ pipeline {
             steps {
                 dir('Project_CICD') {
                     script {
-                        echo "Building CI Docker images (code baked into image)..."
-                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml up -d --build"
+                        // ลบ container เก่าที่อาจค้างอยู่
+                        echo "Cleaning up any stale containers..."
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml down -v 2>/dev/null || true"
                         
-                        echo "Waiting for MySQL to be ready..."
-                        sleep 30
+                        echo "Building CI Docker images (code baked into image)..."
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml build"
+                        
+                        echo "Starting all services..."
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml up -d"
+                        
+                        echo "Waiting for MySQL to be ready (45 seconds)..."
+                        sleep 45
                         
                         echo "Running database migrations..."
-                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml exec -T laravel.test php artisan migrate --force || echo 'Migration skipped (no migrations yet)'"
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml exec -T laravel.test php artisan migrate --force || echo 'Migration skipped'"
                     }
                 }
             }
@@ -74,7 +81,7 @@ pipeline {
             dir('Project_CICD') {
                 script {
                     echo "Cleaning up CI Environment..."
-                    sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml down -v || true"
+                    sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml down -v --remove-orphans 2>/dev/null || true"
                 }
             }
         }
