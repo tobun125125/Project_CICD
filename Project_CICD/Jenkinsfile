@@ -2,76 +2,70 @@ pipeline {
     agent any
     
     environment {
-        // ใช้ตัวแปรตามหน้างานของ Jenkins (ตัวรัน Docker)
         DOCKER_CLIENT = 'docker compose'
     }
 
     stages {
         stage('Prepare Code & Config') {
             steps {
-                script {
-                    echo "Checking out code..."
-                    // ก๊อปปี้ไฟล์คอนฟิกตั้งต้นสำหรับงาน Test
-                    sh "cp .env.example .env"
+                dir('Project_CICD') {
+                    script {
+                        echo "Checking out code..."
+                        sh "cp .env.example .env"
+                    }
                 }
             }
         }
         
         stage('Install Application Dependencies') {
             steps {
-                script {
-                    echo "Installing PHP Composer Dependencies..."
-                    // ใช้ Docker ขนาดเล็กดึงไลบรารี PHP มาลง (เพราะตัวเครื่องของ Jenkins ของโรงพยาบาลอาจจะไม่ได้ลง PHP ทิ้งไว้)
-                    sh 'docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd):/var/www/html" -w /var/www/html laravelsail/php81-composer:latest composer install --ignore-platform-reqs --no-interaction'
+                dir('Project_CICD') {
+                    script {
+                        echo "Installing PHP Composer Dependencies..."
+                        sh 'docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd):/var/www/html" -w /var/www/html laravelsail/php81-composer:latest composer install --ignore-platform-reqs --no-interaction'
+                    }
                 }
             }
         }
         
         stage('Start CI Test Environment') {
             steps {
-                script {
-                    echo "Starting Docker Compose (Sail) Services..."
-                    // เปิดระบบทั้งหมดขึ้นมาหลังบ้านเพื่อลุยทดสอบ (เหมือนพิมพ์ sail up -d)
-                    sh "${DOCKER_CLIENT} -f compose.yaml up -d"
-                    
-                    // ให้เวลาระบบและฐานข้อมูลบูตตัวเอง 15 วินาที
-                    sleep 15
-                    
-                    // รันคำสั่งเตรียม Data ตั้งต้นให้ Laravel (ข้ามการ migrate ไปก่อนเพราะนี่คือโปรเจกต์ใหม่)
-                    sh "${DOCKER_CLIENT} -f compose.yaml exec -T laravel.test php artisan key:generate"
+                dir('Project_CICD') {
+                    script {
+                        echo "Starting Docker Compose (Sail) Services..."
+                        sh "${DOCKER_CLIENT} -f compose.yaml up -d"
+                        sleep 15
+                        sh "${DOCKER_CLIENT} -f compose.yaml exec -T laravel.test php artisan key:generate"
+                    }
                 }
             }
         }
 
         stage('Run Automated Tests') {
             steps {
-                script {
-                    // ====== 1. รัน Test ฝั่ง Laravel (PHP) ======
-                    echo "Running PHPUnit Tests..."
-                    sh "${DOCKER_CLIENT} -f compose.yaml exec -T laravel.test php artisan test"
-                    
-                    // ====== 2. รัน Test ฝั่ง .NET API ======
-                    echo "Running .NET Tests..."
-                    // ระบบจะรันหาไฟล์เทสต์ของฝั่ง .NET ใน API (ถ้ายังไม่เขียน จะใส่ข้าม error ไว้ก่อนให้ผ่านไปได้)
-                    sh "${DOCKER_CLIENT} -f compose.yaml exec -T api_dotnet dotnet test || echo 'Skipping .NET test for now...'"
+                dir('Project_CICD') {
+                    script {
+                        echo "Running PHPUnit Tests..."
+                        sh "${DOCKER_CLIENT} -f compose.yaml exec -T laravel.test php artisan test"
+                        echo "Running .NET Tests..."
+                        sh "${DOCKER_CLIENT} -f compose.yaml exec -T api_dotnet dotnet test || echo 'Skipping .NET test for now...'"
+                    }
                 }
             }
         }
 
         stage('Build & Deploy to Production') {
             when {
-                // *** สำคัญมาก: Jenkins จะยอมให้ขึ้นระบบเฉพาะตอนที่ Push/Merge โค้ดลงแทร็กของ 'main' เท่านั้น ***
                 branch 'main'
             }
             steps {
-                script {
-                    echo "Building Production Ready Docker Images..."
-                    // บิ้ว Image แบบ Production-ready ที่เราเตรียมไฟล์ไว้ชุบแป้งทอด
-                    sh "${DOCKER_CLIENT} -f docker-compose.prod.yml build"
-                    
-                    echo "Deploying to Hospital Production Server..."
-                    // กดปุ่มปล่อยขึ้นรันจริง ทับระบบเดิมแบบ Zero-downtime
-                    sh "${DOCKER_CLIENT} -f docker-compose.prod.yml up -d"
+                dir('Project_CICD') {
+                    script {
+                        echo "Building Production Ready Docker Images..."
+                        sh "${DOCKER_CLIENT} -f docker-compose.prod.yml build"
+                        echo "Deploying to Hospital Production Server..."
+                        sh "${DOCKER_CLIENT} -f docker-compose.prod.yml up -d"
+                    }
                 }
             }
         }
@@ -79,10 +73,11 @@ pipeline {
 
     post {
         always {
-            script {
-                echo "Tearing down CI Environment..."
-                // ทุกครั้งที่ทดสอบเสร็จ (ทั้งผ่านและร่วง) จะกวาดล้างขยะ Container เทสต์ทิ้งทั้งหมดให้สะอาด
-                sh "${DOCKER_CLIENT} -f compose.yaml down -v"
+            dir('Project_CICD') {
+                script {
+                    echo "Tearing down CI Environment..."
+                    sh "${DOCKER_CLIENT} -f compose.yaml down -v"
+                }
             }
         }
         success {
