@@ -69,6 +69,10 @@ pipeline {
                         echo "Stopping CI Environment before Production Deploy..."
                         sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml down -v --remove-orphans 2>/dev/null || true"
                         
+                        // ====== หยุด Production เก่า (ถ้ามี) ======
+                        echo "Stopping old Production containers..."
+                        sh "docker compose -p prod -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true"
+                        
                         echo "Building Production Docker Images..."
                         sh "docker compose -p prod -f docker-compose.prod.yml build"
                         
