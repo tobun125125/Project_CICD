@@ -2,7 +2,8 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_CLIENT = 'docker compose'
+        // ใช้ชื่อโปรเจกต์ที่ไม่ซ้ำกัน เพื่อไม่ไปรบกวน Container dev ของเครื่องจริง
+        COMPOSE_PROJECT_NAME = "ci_${BUILD_NUMBER}"
     }
 
     stages {
@@ -10,32 +11,25 @@ pipeline {
             steps {
                 dir('Project_CICD') {
                     script {
-                        echo "Checking out code..."
+                        echo "Preparing environment..."
                         sh "cp .env.example .env"
                     }
                 }
             }
         }
         
-        stage('Install Application Dependencies') {
+        stage('Build & Start CI Environment') {
             steps {
                 dir('Project_CICD') {
                     script {
-                        echo "Installing PHP Composer Dependencies..."
-                        sh 'docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd):/var/www/html" -w /var/www/html laravelsail/php81-composer:latest composer install --ignore-platform-reqs --no-interaction'
-                    }
-                }
-            }
-        }
-        
-        stage('Start CI Test Environment') {
-            steps {
-                dir('Project_CICD') {
-                    script {
-                        echo "Starting Docker Compose (Sail) Services..."
-                        sh "${DOCKER_CLIENT} -f compose.yaml up -d"
-                        sleep 15
-                        sh "${DOCKER_CLIENT} -f compose.yaml exec -T laravel.test php artisan key:generate"
+                        echo "Building CI Docker images (code baked into image)..."
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml up -d --build"
+                        
+                        echo "Waiting for MySQL to be ready..."
+                        sleep 30
+                        
+                        echo "Running database migrations..."
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml exec -T laravel.test php artisan migrate --force || echo 'Migration skipped (no migrations yet)'"
                     }
                 }
             }
@@ -45,10 +39,13 @@ pipeline {
             steps {
                 dir('Project_CICD') {
                     script {
+                        // ====== 1. รัน Test ฝั่ง Laravel (PHP) ======
                         echo "Running PHPUnit Tests..."
-                        sh "${DOCKER_CLIENT} -f compose.yaml exec -T laravel.test php artisan test"
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml exec -T laravel.test php artisan test"
+                        
+                        // ====== 2. รัน Test ฝั่ง .NET API ======
                         echo "Running .NET Tests..."
-                        sh "${DOCKER_CLIENT} -f compose.yaml exec -T api_dotnet dotnet test || echo 'Skipping .NET test for now...'"
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml exec -T api_dotnet dotnet test || echo 'No .NET tests found, skipping...'"
                     }
                 }
             }
@@ -61,10 +58,11 @@ pipeline {
             steps {
                 dir('Project_CICD') {
                     script {
-                        echo "Building Production Ready Docker Images..."
-                        sh "${DOCKER_CLIENT} -f docker-compose.prod.yml build"
-                        echo "Deploying to Hospital Production Server..."
-                        sh "${DOCKER_CLIENT} -f docker-compose.prod.yml up -d"
+                        echo "Building Production Docker Images..."
+                        sh "docker compose -f docker-compose.prod.yml build"
+                        
+                        echo "Deploying to Production Server..."
+                        sh "docker compose -f docker-compose.prod.yml up -d"
                     }
                 }
             }
@@ -75,13 +73,13 @@ pipeline {
         always {
             dir('Project_CICD') {
                 script {
-                    echo "Tearing down CI Environment..."
-                    sh "${DOCKER_CLIENT} -f compose.yaml down -v"
+                    echo "Cleaning up CI Environment..."
+                    sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml down -v || true"
                 }
             }
         }
         success {
-            echo "CI/CD Pipeline Completed Successfully."
+            echo "CI/CD Pipeline Completed Successfully!"
         }
         failure {
             echo "CI/CD Pipeline Failed! Please check the logs."

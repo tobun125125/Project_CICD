@@ -1,0 +1,47 @@
+# compose.ci.yml - Docker Compose สำหรับ CI Testing โดยเฉพาะ (แยกจาก dev)
+services:
+  laravel.test:
+    build:
+      context: .
+      dockerfile: Dockerfile.ci
+    environment:
+      APP_ENV: testing
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: laravel
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - ci
+
+  api_dotnet:
+    build:
+      context: ./Api
+      dockerfile: Dockerfile
+    networks:
+      - ci
+
+  mysql:
+    image: 'mysql:8.4'
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: laravel
+      MYSQL_USER: sail
+      MYSQL_PASSWORD: password
+      MYSQL_ALLOW_EMPTY_PASSWORD: 1
+    networks:
+      - ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppassword"]
+      retries: 5
+      timeout: 5s
+      interval: 5s
+      start_period: 30s
+
+networks:
+  ci:
+    driver: bridge
