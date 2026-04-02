@@ -79,13 +79,24 @@ pipeline {
                         // อ่านไฟล์ YAML จาก Jenkins แล้ว pipe เข้า kubectl ผ่าน stdin
                         // เพราะ volume mount จาก Jenkins container ไป kubectl container ใช้ไม่ได้ (DinD)
                         sh """
+                        # 1. สร้าง Namespace ก่อนเป็นอันดับแรก
+                        echo "Applying k8s/namespace.yaml ..."
+                        cat k8s/namespace.yaml | docker run --rm -i \\
+                            -v /c/Users/yanapat_sae/.kube/config:/.kube/config \\
+                            --network host \\
+                            -e KUBECONFIG=/.kube/config \\
+                            bitnami/kubectl:latest apply -f -
+                            
+                        # 2. ค่อย Apply ไฟล์อื่นๆ ตามหลัง
                         for f in k8s/*.yaml; do
-                            echo "Applying \$f ..."
-                            cat "\$f" | docker run --rm -i \\
-                                -v /c/Users/yanapat_sae/.kube/config:/.kube/config \\
-                                --network host \\
-                                -e KUBECONFIG=/.kube/config \\
-                                bitnami/kubectl:latest apply -f -
+                            if [ "\$f" != "k8s/namespace.yaml" ]; then
+                                echo "Applying \$f ..."
+                                cat "\$f" | docker run --rm -i \\
+                                    -v /c/Users/yanapat_sae/.kube/config:/.kube/config \\
+                                    --network host \\
+                                    -e KUBECONFIG=/.kube/config \\
+                                    bitnami/kubectl:latest apply -f -
+                            fi
                         done
                         """
                         
