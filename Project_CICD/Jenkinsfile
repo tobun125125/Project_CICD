@@ -58,26 +58,37 @@ pipeline {
             }
         }
 
-        stage('Build & Deploy to Production') {
+        stage('Deploy to Kubernetes') {
             when {
                 branch 'main'
             }
             steps {
                 dir('Project_CICD') {
                     script {
-                        // ====== หยุด CI Environment ก่อน Deploy เพื่อคืน port ======
+                        // ====== หยุด CI Environment ก่อน Deploy ======
                         echo "Stopping CI Environment before Production Deploy..."
                         sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml down -v --remove-orphans 2>/dev/null || true"
                         
-                        // ====== หยุด Production เก่า (ถ้ามี) ======
-                        echo "Stopping old Production containers..."
-                        sh "docker compose -p prod -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true"
-                        
-                        echo "Building Production Docker Images..."
+                        // ====== สร้าง Docker Images สำหรับ K8s ======
+                        echo "Building Docker Images for Kubernetes..."
                         sh "docker compose -p prod -f docker-compose.prod.yml build"
                         
-                        echo "Deploying to Production Server..."
-                        sh "docker compose -p prod -f docker-compose.prod.yml up -d --remove-orphans"
+                        // ====== อัปเดต K8s Manifests ======
+                        echo "Deploying to Kubernetes Cluster..."
+                        
+                        // ใช้ Docker-in-Docker รัน kubectl โดยดึง kubeconfig ของเครื่อง host
+                        // -v C:/Users/yanapat_sae/.kube/config ดึง config สำหรับเข้าถึง K8s
+                        // -v ${workspace}/k8s ดึงไฟล์ manifest เข้าไปรัน
+                        sh """
+                        docker run --rm \\
+                            -v /c/Users/yanapat_sae/.kube/config:/.kube/config \\
+                            -v \$(pwd)/k8s:/workspace/k8s \\
+                            --network host \\
+                            -e KUBECONFIG=/.kube/config \\
+                            bitnami/kubectl:latest apply -f /workspace/k8s/
+                        """
+                        
+                        echo "Kubernetes Deployment Triggered Successfully."
                     }
                 }
             }
