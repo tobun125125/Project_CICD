@@ -3,7 +3,7 @@ FROM php:8.1-cli
 
 # ติดตั้ง Dependencies ของระบบ
 RUN apt-get update && apt-get install -y \
-    git curl zip unzip libzip-dev libpng-dev libjpeg-turbo8-dev libfreetype6-dev \
+    git curl zip unzip libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_mysql gd zip \
     && rm -rf /var/lib/apt/lists/*
