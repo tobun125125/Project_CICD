@@ -65,11 +65,15 @@ pipeline {
             steps {
                 dir('Project_CICD') {
                     script {
+                        // ====== หยุด CI Environment ก่อน Deploy เพื่อคืน port ======
+                        echo "Stopping CI Environment before Production Deploy..."
+                        sh "docker compose -p ${COMPOSE_PROJECT_NAME} -f compose.ci.yml down -v --remove-orphans 2>/dev/null || true"
+                        
                         echo "Building Production Docker Images..."
-                        sh "docker compose -f docker-compose.prod.yml build"
+                        sh "docker compose -p prod -f docker-compose.prod.yml build"
                         
                         echo "Deploying to Production Server..."
-                        sh "docker compose -f docker-compose.prod.yml up -d"
+                        sh "docker compose -p prod -f docker-compose.prod.yml up -d --remove-orphans"
                     }
                 }
             }
