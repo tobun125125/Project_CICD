@@ -12,6 +12,9 @@ services:
       DB_DATABASE: laravel
       DB_USERNAME: sail
       DB_PASSWORD: password
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - ci
 
@@ -29,6 +32,11 @@ services:
       MYSQL_DATABASE: laravel
       MYSQL_USER: sail
       MYSQL_PASSWORD: password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - ci
 
