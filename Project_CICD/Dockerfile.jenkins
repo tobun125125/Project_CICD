@@ -1,0 +1,11 @@
+FROM jenkins/jenkins:lts
+
+USER root
+
+# ติดตั้ง Docker CLI
+RUN curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz \
+    && tar xzvf docker-27.3.1.tgz \
+    && mv docker/docker /usr/local/bin/ \
+    && rm -rf docker docker-27.3.1.tgz
+
+USER jenkins
